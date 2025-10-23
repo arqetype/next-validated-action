@@ -47,7 +47,7 @@ We are committed to providing a welcoming and inspiring community for all. Pleas
 
 ```bash
 # Clone your fork
-git clone https://github.com/YOUR_USERNAME/@arqetype/next-validated-action.git
+git clone https://github.com/YOUR_USERNAME/next-validated-action.git
 cd next-validated-action
 
 # Install dependencies
@@ -79,7 +79,7 @@ npm run lint
 ## Project Structure
 
 ```
-@arqetype/next-validated-action/
+next-validated-action/
 ├── src/
 │   ├── __tests__/          # Test files
 │   │   ├── builder.test.ts

@@ -410,7 +410,7 @@ Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.m
 
 ## 📄 License
 
-MIT © [Your Name]
+MIT © [arqetype](https://github.com/arqetype)
 
 ## 🙏 Acknowledgments
 
@@ -431,9 +431,9 @@ Check out the [examples](./examples) directory for more usage examples:
 ## 🔗 Links
 
 - [Documentation](./docs)
-- [GitHub Repository](https://github.com/your-username/@arqetype/next-validated-action)
+- [GitHub Repository](https://github.com/arqetype/next-validated-action)
 - [NPM Package](https://www.npmjs.com/package/@arqetype/next-validated-action)
-- [Issue Tracker](https://github.com/your-username/@arqetype/next-validated-action/issues)
+- [Issue Tracker](https://github.com/arqetype/next-validated-action/issues)
 
 ## ⚡ Performance
 

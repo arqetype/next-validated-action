@@ -40,11 +40,11 @@
     "middleware",
     "retry"
   ],
-  "author": "",
+  "author": "arqetype",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/arqetype/next-validated-action"
   },
   "peerDependencies": {
     "class-transformer": "^0.5.0",
