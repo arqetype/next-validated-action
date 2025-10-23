@@ -9,6 +9,9 @@ import type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  DebounceConfig,
+  CacheConfig,
+  CacheStorage,
   HookEvent,
   HookCallback,
   HookCallbacks,
@@ -27,6 +30,8 @@ import type {
 } from './types';
 import { validateData, formatValidationErrors } from './validation';
 import { withRetry, formatError } from './utils';
+import { getOrCreateDebouncedAction } from './debounce';
+import { getGlobalMemoryCache, generateDefaultCacheKey } from './cache';
 
 /**
  * Builder class for creating type-safe server actions with validation
@@ -49,6 +54,8 @@ export class ActionClientBuilder<
   private _logger?: Logger;
   private _retryConfig?: RetryConfig;
   private _rateLimitConfig?: RateLimitConfig;
+  private _debounceConfig?: DebounceConfig;
+  private _cacheConfig?: CacheConfig<TInput>;
   private _validationOptions?: ValidatorOptions;
   private _hooks: Partial<HookCallbacks<TInput, TOutput, TUser>> = {};
 
@@ -63,6 +70,8 @@ export class ActionClientBuilder<
     logger?: Logger,
     retryConfig?: RetryConfig,
     rateLimitConfig?: RateLimitConfig,
+    debounceConfig?: DebounceConfig,
+    cacheConfig?: CacheConfig<TInput>,
     validationOptions?: ValidatorOptions,
     hooks: Partial<HookCallbacks<TInput, TOutput, TUser>> = {}
   ) {
@@ -73,6 +82,8 @@ export class ActionClientBuilder<
     this._logger = logger;
     this._retryConfig = retryConfig;
     this._rateLimitConfig = rateLimitConfig;
+    this._debounceConfig = debounceConfig;
+    this._cacheConfig = cacheConfig;
     this._validationOptions = validationOptions;
     this._hooks = hooks;
   }
@@ -105,6 +116,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      undefined as CacheConfig<TNewInput> | undefined,
       this._validationOptions,
       this._hooks as Partial<HookCallbacks<TNewInput, TOutput, TUser>>
     );
@@ -131,13 +144,15 @@ export class ActionClientBuilder<
       this._inputDto as ClassConstructor<TInput>,
       dto,
       this._authHandler,
-      this._middlewares as Middleware<
+      [] as Middleware<
         ActionContext<TInput, TUser>,
         ActionResult<TNewOutput>
       >[],
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig as CacheConfig<TInput>,
       this._validationOptions,
       this._hooks as Partial<HookCallbacks<TInput, TNewOutput, TUser>>
     );
@@ -168,6 +183,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig as CacheConfig<TInput>,
       this._validationOptions,
       {} as Partial<HookCallbacks<TInput, TOutput, TNewUser>>
     );
@@ -198,6 +215,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig,
       this._validationOptions,
       this._hooks
     );
@@ -223,6 +242,8 @@ export class ActionClientBuilder<
       logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig,
       this._validationOptions,
       this._hooks
     );
@@ -246,6 +267,8 @@ export class ActionClientBuilder<
       this._logger,
       config,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig,
       this._validationOptions,
       this._hooks
     );
@@ -271,6 +294,96 @@ export class ActionClientBuilder<
       this._middlewares,
       this._logger,
       this._retryConfig,
+      config,
+      this._debounceConfig,
+      this._cacheConfig,
+      this._validationOptions,
+      this._hooks
+    );
+  }
+
+  /**
+   * Configure debouncing for the action
+   * @param delay - Delay in milliseconds before executing the action
+   * @returns A new builder with debouncing configured
+   * @example
+   * ```ts
+   * action.debounce(300)
+   * ```
+   */
+  debounce(delay: number): ActionClientBuilder<TInput, TOutput, TUser> {
+    return new ActionClientBuilder<TInput, TOutput, TUser>(
+      this._inputDto as ClassConstructor<TInput>,
+      this._outputDto as ClassConstructor<TOutput>,
+      this._authHandler,
+      this._middlewares,
+      this._logger,
+      this._retryConfig,
+      this._rateLimitConfig,
+      { delay, trailing: true },
+      this._cacheConfig,
+      this._validationOptions,
+      this._hooks
+    );
+  }
+
+  /**
+   * Configure debouncing with advanced options for the action
+   * @param config - Debounce configuration
+   * @returns A new builder with debouncing configured
+   * @example
+   * ```ts
+   * action.debounceOptions({
+   *   delay: 300,
+   *   leading: false,
+   *   trailing: true,
+   *   maxWait: 1000
+   * })
+   * ```
+   */
+  debounceOptions(
+    config: DebounceConfig
+  ): ActionClientBuilder<TInput, TOutput, TUser> {
+    return new ActionClientBuilder<TInput, TOutput, TUser>(
+      this._inputDto as ClassConstructor<TInput>,
+      this._outputDto as ClassConstructor<TOutput>,
+      this._authHandler,
+      this._middlewares,
+      this._logger,
+      this._retryConfig,
+      this._rateLimitConfig,
+      config,
+      this._cacheConfig,
+      this._validationOptions,
+      this._hooks
+    );
+  }
+
+  /**
+   * Configure caching for the action
+   * @param config - Cache configuration
+   * @returns A new builder with caching configured
+   * @example
+   * ```ts
+   * action.cache({
+   *   ttl: 60000, // 1 minute
+   *   key: (input) => `user-${input.id}`,
+   *   cacheErrors: false
+   * })
+   * ```
+   */
+  cache(
+    config: CacheConfig<TInput>
+  ): ActionClientBuilder<TInput, TOutput, TUser> {
+    return new ActionClientBuilder<TInput, TOutput, TUser>(
+      this._inputDto as ClassConstructor<TInput>,
+      this._outputDto as ClassConstructor<TOutput>,
+      this._authHandler,
+      this._middlewares,
+      this._logger,
+      this._retryConfig,
+      this._rateLimitConfig,
+      this._debounceConfig,
       config,
       this._validationOptions,
       this._hooks
@@ -301,6 +414,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig,
       options,
       this._hooks
     );
@@ -370,6 +485,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._debounceConfig,
+      this._cacheConfig,
       this._validationOptions,
       newHooks
     );
@@ -393,11 +510,40 @@ export class ActionClientBuilder<
   action(
     handler: (context: ActionContext<TInput, TUser>) => Promise<TOutput>
   ): (input?: unknown) => Promise<ActionResult<TOutput>> {
-    return async (input: unknown): Promise<ActionResult<TOutput>> => {
+    // Generate a unique ID for this action definition (not per call)
+    const actionDefinitionId = Math.random().toString(36).substring(7);
+
+    const coreActionFn = async (
+      input: unknown
+    ): Promise<ActionResult<TOutput>> => {
       const actionId = Math.random().toString(36).substring(7);
       const startTime = Date.now();
 
       this._log('info', 'Action started', { actionId, hasInput: !!input });
+
+      // Check cache if configured
+      let cacheStorage: CacheStorage | undefined;
+      let cacheKey: string | undefined;
+
+      if (this._cacheConfig) {
+        cacheStorage =
+          this._cacheConfig.storage === 'memory' || !this._cacheConfig.storage
+            ? getGlobalMemoryCache()
+            : this._cacheConfig.storage;
+
+        cacheKey = this._cacheConfig.key
+          ? this._cacheConfig.key(input as TInput)
+          : generateDefaultCacheKey(input);
+
+        // Try to get from cache
+        const cached = await cacheStorage.get<ActionResult<TOutput>>(cacheKey);
+        if (cached) {
+          this._log('debug', 'Cache hit', { actionId, cacheKey });
+          return cached;
+        }
+
+        this._log('debug', 'Cache miss', { actionId, cacheKey });
+      }
 
       // Execute the core action logic
       const executeAction = async (): Promise<ActionResult<TOutput>> => {
@@ -793,7 +939,27 @@ export class ActionClientBuilder<
             }
           };
 
-          return await withRetry(executeWithRetryHook, this._retryConfig);
+          const retryResult = await withRetry(
+            executeWithRetryHook,
+            this._retryConfig
+          );
+
+          // Cache the result if configured
+          if (cacheStorage && cacheKey) {
+            const shouldCache =
+              retryResult.success || (this._cacheConfig?.cacheErrors ?? false);
+
+            if (shouldCache) {
+              await cacheStorage.set(
+                cacheKey,
+                retryResult,
+                this._cacheConfig?.ttl
+              );
+              this._log('debug', 'Result cached', { actionId, cacheKey });
+            }
+          }
+
+          return retryResult;
         } catch (error) {
           this._log('error', 'All retry attempts failed', {
             actionId,
@@ -802,15 +968,36 @@ export class ActionClientBuilder<
 
           // Return the last result if we have one
           if (lastResult) {
+            // Cache the error result if configured
+            if (cacheStorage && cacheKey && this._cacheConfig?.cacheErrors) {
+              await cacheStorage.set(
+                cacheKey,
+                lastResult,
+                this._cacheConfig?.ttl
+              );
+              this._log('debug', 'Error result cached', { actionId, cacheKey });
+            }
             return lastResult;
           }
 
-          return {
+          const errorResult = {
             success: false,
             error: 'server',
             message: formatError(error),
             cause: error,
-          };
+          } as ActionResult<TOutput>;
+
+          // Cache the error result if configured
+          if (cacheStorage && cacheKey && this._cacheConfig?.cacheErrors) {
+            await cacheStorage.set(
+              cacheKey,
+              errorResult,
+              this._cacheConfig?.ttl
+            );
+            this._log('debug', 'Error result cached', { actionId, cacheKey });
+          }
+
+          return errorResult;
         } finally {
           // Trigger complete hook
           const duration = Date.now() - startTime;
@@ -835,6 +1022,17 @@ export class ActionClientBuilder<
 
       const result = await executeAction();
 
+      // Cache the result if configured
+      if (cacheStorage && cacheKey) {
+        const shouldCache =
+          result.success || (this._cacheConfig?.cacheErrors ?? false);
+
+        if (shouldCache) {
+          await cacheStorage.set(cacheKey, result, this._cacheConfig?.ttl);
+          this._log('debug', 'Result cached', { actionId, cacheKey });
+        }
+      }
+
       // Trigger complete hook for non-retry case
       const duration = Date.now() - startTime;
       await this._triggerHook('complete', {
@@ -848,6 +1046,19 @@ export class ActionClientBuilder<
 
       return result;
     };
+
+    // If debouncing is configured, wrap the action function
+    if (this._debounceConfig) {
+      const debouncedFn = getOrCreateDebouncedAction(
+        actionDefinitionId,
+        coreActionFn,
+        this._debounceConfig
+      );
+      // Cast to the expected return type (removes debounce-specific methods)
+      return debouncedFn as (input?: unknown) => Promise<ActionResult<TOutput>>;
+    }
+
+    return coreActionFn;
   }
 
   /**

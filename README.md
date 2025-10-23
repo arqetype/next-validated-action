@@ -12,6 +12,7 @@ Type-safe Next.js server actions with comprehensive validation, middleware, retr
 - 🔐 **Authentication** - Flexible authentication handling
 - 🎯 **Structured Error Handling** - Detailed, type-safe error responses
 - 🔄 **Retry Logic** - Automatic retry with configurable backoff strategies
+- 💾 **Caching/Memoization** - Built-in result caching with configurable storage
 - 🎭 **Middleware Support** - Intercept and modify action execution
 - 📊 **Logging & Observability** - Built-in logging capabilities
 - 🚀 **Developer Experience** - Fluent builder pattern API
@@ -148,6 +149,49 @@ export const myAction = action
     return await callUnstableAPI();
   });
 ```
+
+### Caching
+
+Cache expensive operations to avoid redundant processing:
+
+```typescript
+export const getUserProfile = action
+  .inputDto(UserInput)
+  .cache({
+    ttl: 60000, // Cache for 60 seconds
+    key: (input) => `user-${input.userId}`, // Custom cache key
+  })
+  .action(async ({ parsedInput }) => {
+    // This expensive query will be cached
+    return await db.user.findUnique({ where: { id: parsedInput.userId } });
+  });
+```
+
+**Advanced caching options:**
+
+```typescript
+import { MemoryCacheStorage } from '@arqetype/next-validated-action';
+
+// Use custom storage instance
+const myCache = new MemoryCacheStorage();
+
+export const cachedAction = action
+  .cache({
+    ttl: 300000, // 5 minutes
+    storage: myCache, // Custom storage
+    cacheErrors: false, // Don't cache errors (default)
+    key: (input) => `custom-${input.id}`, // Custom key generator
+  })
+  .action(async ({ parsedInput }) => {
+    return await expensiveOperation(parsedInput);
+  });
+
+// Get cache statistics
+const stats = myCache.getStats();
+console.log(`Cache size: ${stats.size}, expired: ${stats.expired}`);
+```
+
+See the [Cache Documentation](./docs/CACHE.md) for more details.
 
 ### Logging
 
@@ -377,6 +421,7 @@ const data = unwrapOr(await myAction({ input: 'test' }), { default: true });
 - `.use(middleware)` - Add middleware
 - `.logger(logger)` - Configure logging
 - `.retry(config)` - Configure retry logic
+- `.cache(config)` - Configure caching/memoization
 - `.rateLimit(config)` - Store rate limit metadata
 - `.validationOptions(options)` - Configure validation options
 - `.on(event, callback)` - Register a lifecycle hook
@@ -524,6 +569,7 @@ export const deleteUser = adminAction
 ## 📝 Documentation
 
 - [API Reference](./docs/API.md) - Complete API documentation
+- [Cache Documentation](./docs/CACHE.md) - Caching and memoization guide
 - [Advanced Usage](./docs/ADVANCED.md) - Advanced patterns and examples
 - [Contributing](./CONTRIBUTING.md) - Contribution guidelines
 
@@ -560,6 +606,7 @@ Check out the [examples](./examples) directory for more usage examples:
 
 - Basic CRUD operations
 - Authentication patterns
+- Caching strategies
 - Middleware usage
 - Error handling strategies
 - Complex validation scenarios

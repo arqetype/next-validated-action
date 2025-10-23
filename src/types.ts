@@ -90,6 +90,30 @@ export type RateLimitConfig = {
 };
 
 /**
+ * Debounce configuration
+ */
+export type DebounceConfig = {
+  /**
+   * Delay in milliseconds before executing the action
+   */
+  delay: number;
+  /**
+   * Execute on the leading edge of the timeout
+   * Default: false
+   */
+  leading?: boolean;
+  /**
+   * Execute on the trailing edge of the timeout
+   * Default: true
+   */
+  trailing?: boolean;
+  /**
+   * Maximum time the action can be delayed before it's invoked
+   */
+  maxWait?: number;
+};
+
+/**
  * Validation options passed to class-validator
  */
 export type ValidationOptions = {
@@ -98,6 +122,42 @@ export type ValidationOptions = {
   forbidNonWhitelisted?: boolean;
   forbidUnknownValues?: boolean;
   stopAtFirstError?: boolean;
+};
+
+/**
+ * Cache storage interface for storing cached results
+ */
+export interface CacheStorage {
+  get<T>(key: string): Promise<T | undefined>;
+  set<T>(key: string, value: T, ttl?: number): Promise<void>;
+  delete(key: string): Promise<void>;
+  clear(): Promise<void>;
+  has(key: string): Promise<boolean>;
+}
+
+/**
+ * Cache configuration
+ */
+export type CacheConfig<TInput = unknown> = {
+  /**
+   * Time to live in milliseconds
+   */
+  ttl?: number;
+  /**
+   * Cache key generator function
+   * If not provided, a default key generator will be used
+   */
+  key?: (input: TInput) => string;
+  /**
+   * Storage backend for cache
+   * Default: 'memory'
+   */
+  storage?: CacheStorage | 'memory';
+  /**
+   * Whether to cache errors
+   * Default: false
+   */
+  cacheErrors?: boolean;
 };
 
 /**

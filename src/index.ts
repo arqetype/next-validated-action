@@ -8,8 +8,11 @@ export type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  DebounceConfig,
   ValidationOptions,
   ValidationError,
+  CacheConfig,
+  CacheStorage,
   HookEvent,
   HookCallback,
   HookCallbacks,
@@ -43,11 +46,20 @@ export {
 
 export { validateData, formatValidationErrors } from './validation';
 
+export { withRetry, isRetriableError, formatError, deepClone } from './utils';
+
+export type { DebouncedFunction } from './debounce';
+
 export {
-  withRetry,
-  isRetriableError,
-  formatError,
-  deepClone,
   debounce,
-  throttle,
-} from './utils';
+  getOrCreateDebouncedAction,
+  clearDebouncedAction,
+  clearAllDebouncedActions,
+} from './debounce';
+
+export {
+  MemoryCacheStorage,
+  getGlobalMemoryCache,
+  clearGlobalMemoryCache,
+  generateDefaultCacheKey,
+} from './cache';
