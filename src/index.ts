@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 
-// Export types
 export type {
   ActionResult,
   ActionContext,
@@ -13,10 +12,8 @@ export type {
   ValidationError,
 } from './types';
 
-// Export builder
 export { ActionClientBuilder, action } from './builder';
 
-// Export type guards
 export {
   isSuccess,
   isError,
@@ -28,10 +25,8 @@ export {
   unwrapOr,
 } from './guards';
 
-// Export validation utilities
 export { validateData, formatValidationErrors } from './validation';
 
-// Export utility functions
 export {
   withRetry,
   isRetriableError,
