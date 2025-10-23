@@ -12,7 +12,9 @@ Type-safe Next.js server actions with comprehensive validation, middleware, retr
 - 🔐 **Authentication** - Flexible authentication handling
 - 🎯 **Structured Error Handling** - Detailed, type-safe error responses
 - 🔄 **Retry Logic** - Automatic retry with configurable backoff strategies
+- ⏱️ **Throttling** - Rate limiting with fixed and sliding window strategies
 - 💾 **Caching/Memoization** - Built-in result caching with configurable storage
+- ⏳ **Debouncing** - Delay execution until inputs stabilize
 - 🎭 **Middleware Support** - Intercept and modify action execution
 - 📊 **Logging & Observability** - Built-in logging capabilities
 - 🚀 **Developer Experience** - Fluent builder pattern API
@@ -192,6 +194,42 @@ console.log(`Cache size: ${stats.size}, expired: ${stats.expired}`);
 ```
 
 See the [Cache Documentation](./docs/CACHE.md) for more details.
+
+### Throttling
+
+Limit execution frequency to prevent abuse and control load:
+
+```typescript
+export const sendMessage = action
+  .inputDto(MessageInput)
+  .throttle({
+    maxCalls: 5,        // Maximum 5 calls
+    windowMs: 60000,    // Per minute
+    strategy: 'sliding', // or 'fixed'
+    identifier: (ctx) => ctx.user?.id || 'anonymous', // Per-user throttle
+  })
+  .action(async ({ parsedInput }) => {
+    return await sendMessage(parsedInput);
+  });
+```
+
+**When throttle limit is exceeded:**
+
+```typescript
+const result = await sendMessage(input);
+
+if (!result.success && result.message.includes('Too many requests')) {
+  // Error message: "Too many requests. Limit: 5 calls per 60000ms. Try again in 45s."
+  console.error('Rate limit exceeded');
+}
+```
+
+**Throttle strategies:**
+
+- **Fixed window**: Resets counter at fixed intervals (simpler, more efficient)
+- **Sliding window**: Tracks individual timestamps (more accurate, prevents bursts)
+
+See the [Throttle Documentation](./docs/THROTTLE.md) for more details.
 
 ### Logging
 
@@ -570,6 +608,8 @@ export const deleteUser = adminAction
 
 - [API Reference](./docs/API.md) - Complete API documentation
 - [Cache Documentation](./docs/CACHE.md) - Caching and memoization guide
+- [Throttle Documentation](./docs/THROTTLE.md) - Rate limiting and throttling guide
+- [Debounce Documentation](./docs/DEBOUNCE.md) - Debouncing guide
 - [Advanced Usage](./docs/ADVANCED.md) - Advanced patterns and examples
 - [Contributing](./CONTRIBUTING.md) - Contribution guidelines
 

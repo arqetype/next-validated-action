@@ -90,6 +90,36 @@ export type RateLimitConfig = {
 };
 
 /**
+ * Throttle configuration
+ */
+export type ThrottleConfig<TInput = unknown, TUser = unknown> = {
+  /**
+   * Maximum number of calls allowed within the time window
+   */
+  maxCalls: number;
+  /**
+   * Time window in milliseconds
+   */
+  windowMs: number;
+  /**
+   * Throttling strategy
+   * - 'fixed': Fixed time window that resets at regular intervals
+   * - 'sliding': Sliding time window that tracks individual call timestamps
+   * Default: 'fixed'
+   */
+  strategy?: 'fixed' | 'sliding';
+  /**
+   * Identifier function to determine throttle scope (per-user, per-IP, etc.)
+   * If not provided, throttling applies globally to the action
+   */
+  identifier?: (context: {
+    parsedInput?: TInput;
+    user?: TUser;
+    ip?: string;
+  }) => string;
+};
+
+/**
  * Debounce configuration
  */
 export type DebounceConfig = {

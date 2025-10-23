@@ -8,6 +8,7 @@ export type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  ThrottleConfig,
   DebounceConfig,
   ValidationOptions,
   ValidationError,
@@ -63,3 +64,11 @@ export {
   clearGlobalMemoryCache,
   generateDefaultCacheKey,
 } from './cache';
+
+export {
+  checkThrottle,
+  resetThrottle,
+  resetAllThrottles,
+  getThrottleState,
+  DEFAULT_THROTTLE_IDENTIFIER,
+} from './throttle';

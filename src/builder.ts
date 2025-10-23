@@ -9,6 +9,7 @@ import type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  ThrottleConfig,
   DebounceConfig,
   CacheConfig,
   CacheStorage,
@@ -32,6 +33,7 @@ import { validateData, formatValidationErrors } from './validation';
 import { withRetry, formatError } from './utils';
 import { getOrCreateDebouncedAction } from './debounce';
 import { getGlobalMemoryCache, generateDefaultCacheKey } from './cache';
+import { checkThrottle, DEFAULT_THROTTLE_IDENTIFIER } from './throttle';
 
 /**
  * Builder class for creating type-safe server actions with validation
@@ -54,6 +56,7 @@ export class ActionClientBuilder<
   private _logger?: Logger;
   private _retryConfig?: RetryConfig;
   private _rateLimitConfig?: RateLimitConfig;
+  private _throttleConfig?: ThrottleConfig<TInput, TUser>;
   private _debounceConfig?: DebounceConfig;
   private _cacheConfig?: CacheConfig<TInput>;
   private _validationOptions?: ValidatorOptions;
@@ -70,6 +73,7 @@ export class ActionClientBuilder<
     logger?: Logger,
     retryConfig?: RetryConfig,
     rateLimitConfig?: RateLimitConfig,
+    throttleConfig?: ThrottleConfig<TInput, TUser>,
     debounceConfig?: DebounceConfig,
     cacheConfig?: CacheConfig<TInput>,
     validationOptions?: ValidatorOptions,
@@ -82,6 +86,7 @@ export class ActionClientBuilder<
     this._logger = logger;
     this._retryConfig = retryConfig;
     this._rateLimitConfig = rateLimitConfig;
+    this._throttleConfig = throttleConfig;
     this._debounceConfig = debounceConfig;
     this._cacheConfig = cacheConfig;
     this._validationOptions = validationOptions;
@@ -116,10 +121,11 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig as ThrottleConfig<TNewInput, TUser> | undefined,
       this._debounceConfig,
       undefined as CacheConfig<TNewInput> | undefined,
       this._validationOptions,
-      this._hooks as Partial<HookCallbacks<TNewInput, TOutput, TUser>>
+      {} as Partial<HookCallbacks<TNewInput, TOutput, TUser>>
     );
   }
 
@@ -151,10 +157,11 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig as CacheConfig<TInput>,
       this._validationOptions,
-      this._hooks as Partial<HookCallbacks<TInput, TNewOutput, TUser>>
+      {} as Partial<HookCallbacks<TInput, TNewOutput, TUser>>
     );
   }
 
@@ -183,8 +190,9 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig as ThrottleConfig<TInput, TNewUser> | undefined,
       this._debounceConfig,
-      this._cacheConfig as CacheConfig<TInput>,
+      this._cacheConfig,
       this._validationOptions,
       {} as Partial<HookCallbacks<TInput, TOutput, TNewUser>>
     );
@@ -215,6 +223,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig,
       this._validationOptions,
@@ -242,6 +251,7 @@ export class ActionClientBuilder<
       logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig,
       this._validationOptions,
@@ -267,6 +277,7 @@ export class ActionClientBuilder<
       this._logger,
       config,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig,
       this._validationOptions,
@@ -295,6 +306,39 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       config,
+      this._throttleConfig,
+      this._debounceConfig,
+      this._cacheConfig,
+      this._validationOptions,
+      this._hooks
+    );
+  }
+
+  /**
+   * Configure throttling to limit execution frequency
+   * @param config - Throttle configuration
+   * @example
+   * ```ts
+   * action.throttle({
+   *   maxCalls: 10,
+   *   windowMs: 60000, // 10 calls per minute
+   *   strategy: 'sliding',
+   *   identifier: (ctx) => ctx.user?.id || ctx.ip
+   * })
+   * ```
+   */
+  throttle(
+    config: ThrottleConfig<TInput, TUser>
+  ): ActionClientBuilder<TInput, TOutput, TUser> {
+    return new ActionClientBuilder<TInput, TOutput, TUser>(
+      this._inputDto as ClassConstructor<TInput>,
+      this._outputDto as ClassConstructor<TOutput>,
+      this._authHandler,
+      this._middlewares,
+      this._logger,
+      this._retryConfig,
+      this._rateLimitConfig,
+      config,
       this._debounceConfig,
       this._cacheConfig,
       this._validationOptions,
@@ -320,6 +364,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       { delay, trailing: true },
       this._cacheConfig,
       this._validationOptions,
@@ -352,6 +397,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       config,
       this._cacheConfig,
       this._validationOptions,
@@ -383,6 +429,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       config,
       this._validationOptions,
@@ -414,6 +461,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig,
       options,
@@ -485,6 +533,7 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
+      this._throttleConfig,
       this._debounceConfig,
       this._cacheConfig,
       this._validationOptions,
@@ -546,7 +595,9 @@ export class ActionClientBuilder<
       }
 
       // Execute the core action logic
-      const executeAction = async (): Promise<ActionResult<TOutput>> => {
+      const executeAction = async (
+        isRetry = false
+      ): Promise<ActionResult<TOutput>> => {
         // 1. Authentication
         let user: TUser | undefined;
 
@@ -697,13 +748,83 @@ export class ActionClientBuilder<
           });
         }
 
-        // 3. Create context
+        // 3. Check throttle if configured (only on first attempt, not retries)
+        if (this._throttleConfig && !isRetry) {
+          const identifier = this._throttleConfig.identifier
+            ? this._throttleConfig.identifier({
+                parsedInput,
+                user,
+                ip: undefined, // IP can be passed via middleware if needed
+              })
+            : DEFAULT_THROTTLE_IDENTIFIER();
+
+          const throttleResult = checkThrottle(
+            actionDefinitionId,
+            identifier,
+            this._throttleConfig
+          );
+
+          if (!throttleResult.allowed) {
+            const resetTime = throttleResult.resetTime
+              ? new Date(throttleResult.resetTime).toISOString()
+              : 'unknown';
+            const retryAfterMs = throttleResult.resetTime
+              ? throttleResult.resetTime - Date.now()
+              : 0;
+
+            this._log('warn', 'Throttle limit exceeded', {
+              actionId,
+              identifier,
+              current: throttleResult.current,
+              limit: throttleResult.limit,
+              resetTime,
+            });
+
+            const throttleErrorResult = {
+              success: false,
+              error: 'server',
+              message: `Too many requests. Limit: ${throttleResult.limit} calls per ${this._throttleConfig.windowMs}ms. Try again in ${Math.ceil(retryAfterMs / 1000)}s.`,
+            } as const;
+
+            // Trigger serverError hook for throttle
+            await this._triggerHook('serverError', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              parsedInput,
+              message: throttleErrorResult.message,
+              cause: new Error('Throttle limit exceeded'),
+              error: new Error('Throttle limit exceeded'),
+            });
+
+            // Trigger generic error hook
+            await this._triggerHook('error', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              errorType: 'server',
+              message: throttleErrorResult.message,
+              error: new Error('Throttle limit exceeded'),
+              parsedInput,
+            });
+
+            return throttleErrorResult;
+          }
+
+          this._log('debug', 'Throttle check passed', {
+            actionId,
+            identifier,
+            remaining: throttleResult.remaining,
+          });
+        }
+
+        // 4. Create context
         const context: ActionContext<TInput, TUser> = {
           parsedInput,
           user,
         };
 
-        // 4. Execute handler with middlewares
+        // 5. Execute handler with middlewares
         try {
           this._log('debug', 'Executing handler', { actionId });
 
@@ -735,7 +856,7 @@ export class ActionClientBuilder<
                 rawOutput: data,
               });
 
-              // 5. Output validation
+              // 6. Output validation
               if (this._outputDto) {
                 this._log('debug', 'Validating output', { actionId });
 
@@ -911,7 +1032,7 @@ export class ActionClientBuilder<
                 });
               }
 
-              const result = await executeAction();
+              const result = await executeAction(currentAttempt > 1);
 
               // If the action succeeded, return the result
               if (result.success) {
@@ -922,11 +1043,15 @@ export class ActionClientBuilder<
               lastResult = result;
 
               // For server errors, throw to trigger retry
-              if (result.error === 'server') {
+              // BUT don't retry throttle errors
+              if (
+                result.error === 'server' &&
+                !result.message.includes('Too many requests')
+              ) {
                 throw new Error(result.message);
               }
 
-              // For validation or auth errors, don't retry
+              // For validation, auth, or throttle errors, don't retry
               return result;
             } catch (error) {
               lastResult = {
