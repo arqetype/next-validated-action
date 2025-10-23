@@ -181,6 +181,141 @@ export const myAction = action
   });
 ```
 
+### Hooks
+
+Add lifecycle hooks for observability, logging, and telemetry:
+
+```typescript
+export const myAction = action
+  .inputDto(MyInput)
+  .outputDto(MyOutput)
+
+  // Success hook - track successful completions
+  .on('success', async (ctx) => {
+    analytics.track('action_success', {
+      actionId: ctx.actionId,
+      duration: ctx.duration,
+      data: ctx.result.data,
+    });
+  })
+
+  // Error hooks - send to monitoring services
+  .on('error', async (ctx) => {
+    Sentry.captureException(ctx.error, {
+      extra: {
+        actionId: ctx.actionId,
+        errorType: ctx.errorType,
+      },
+    });
+  })
+
+  // Specific error handlers
+  .on('inputValidationError', async (ctx) => {
+    console.error('Validation failed:', ctx.details);
+  })
+
+  .on('serverError', async (ctx) => {
+    logError(ctx.message, ctx.cause);
+  })
+
+  // Lifecycle hooks
+  .on('beforeExecution', async (ctx) => {
+    console.time(`action-${ctx.actionId}`);
+  })
+
+  .on('afterExecution', async (ctx) => {
+    console.timeEnd(`action-${ctx.actionId}`);
+  })
+
+  // Retry monitoring
+  .retry({ attempts: 3, delay: 1000 })
+  .on('retry', async (ctx) => {
+    console.log(`Retry ${ctx.attempt}/${ctx.maxAttempts}`);
+  })
+
+  // Always runs (success or failure)
+  .on('complete', async (ctx) => {
+    await cleanup(ctx.actionId);
+    metrics.record('action.duration', ctx.duration);
+  })
+
+  .action(async ({ parsedInput }) => {
+    return await processData(parsedInput);
+  });
+```
+
+#### Available Hook Events
+
+**Lifecycle Hooks:**
+
+- `beforeValidation` - Before input validation starts
+- `afterValidation` - After successful input validation
+- `beforeExecution` - Before handler execution
+- `afterExecution` - After handler execution
+
+**Success Hook:**
+
+- `success` - Action completed successfully
+
+**Error Hooks:**
+
+- `error` - Any error occurred (catches all error types)
+- `authError` - Authentication failed
+- `inputValidationError` - Input validation failed
+- `outputValidationError` - Output validation failed (bug in handler)
+- `serverError` - Handler threw an error
+
+**Other Hooks:**
+
+- `retry` - Retry attempt is happening
+- `complete` - Always called at the end (success or failure)
+
+#### Hook Context
+
+Each hook receives a context object with relevant data:
+
+```typescript
+// Example: success hook context
+{
+  actionId: string;        // Unique action execution ID
+  timestamp: Date;         // When the hook fired
+  user?: TUser;           // Authenticated user (if any)
+  parsedInput: TInput;    // Validated input
+  result: { success: true; data: TOutput };
+  duration: number;       // Execution time in ms
+}
+
+// Example: error hook context
+{
+  actionId: string;
+  timestamp: Date;
+  user?: TUser;
+  errorType: 'auth' | 'input' | 'output' | 'server';
+  message: string;
+  error: unknown;         // The actual error
+  parsedInput?: TInput;
+}
+```
+
+#### Async Hooks
+
+Hooks can be async (awaited) or sync (fire-and-forget):
+
+```typescript
+action
+  // Async - waits for completion
+  .on('success', async (ctx) => {
+    await auditLog.record(ctx.result);
+  })
+
+  // Sync - fire and forget
+  .on('error', (ctx) => {
+    errorTracker.capture(ctx.error);
+  });
+```
+
+**Note:** Hooks are non-breaking - if a hook throws an error, it will be logged but won't affect the action result.
+
 ## 🎯 Error Handling
 
 ### Type Guards
@@ -244,6 +379,7 @@ const data = unwrapOr(await myAction({ input: 'test' }), { default: true });
 - `.retry(config)` - Configure retry logic
 - `.rateLimit(config)` - Store rate limit metadata
 - `.validationOptions(options)` - Configure validation options
+- `.on(event, callback)` - Register a lifecycle hook
 - `.action(handler)` - Define the action handler
 
 ### Result Type

@@ -9,6 +9,21 @@ import type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  HookEvent,
+  HookCallback,
+  HookCallbacks,
+  BeforeValidationContext,
+  AfterValidationContext,
+  BeforeExecutionContext,
+  AfterExecutionContext,
+  SuccessContext,
+  ErrorContext,
+  AuthErrorContext,
+  InputValidationErrorContext,
+  OutputValidationErrorContext,
+  ServerErrorContext,
+  RetryContext,
+  CompleteContext,
 } from './types';
 import { validateData, formatValidationErrors } from './validation';
 import { withRetry, formatError } from './utils';
@@ -35,6 +50,7 @@ export class ActionClientBuilder<
   private _retryConfig?: RetryConfig;
   private _rateLimitConfig?: RateLimitConfig;
   private _validationOptions?: ValidatorOptions;
+  private _hooks: Partial<HookCallbacks<TInput, TOutput, TUser>> = {};
 
   constructor(
     inputDto?: ClassConstructor<TInput>,
@@ -47,7 +63,8 @@ export class ActionClientBuilder<
     logger?: Logger,
     retryConfig?: RetryConfig,
     rateLimitConfig?: RateLimitConfig,
-    validationOptions?: ValidatorOptions
+    validationOptions?: ValidatorOptions,
+    hooks: Partial<HookCallbacks<TInput, TOutput, TUser>> = {}
   ) {
     this._inputDto = inputDto;
     this._outputDto = outputDto;
@@ -57,6 +74,7 @@ export class ActionClientBuilder<
     this._retryConfig = retryConfig;
     this._rateLimitConfig = rateLimitConfig;
     this._validationOptions = validationOptions;
+    this._hooks = hooks;
   }
 
   /**
@@ -87,7 +105,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks as Partial<HookCallbacks<TNewInput, TOutput, TUser>>
     );
   }
 
@@ -119,7 +138,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks as Partial<HookCallbacks<TInput, TNewOutput, TUser>>
     );
   }
 
@@ -148,7 +168,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      {} as Partial<HookCallbacks<TInput, TOutput, TNewUser>>
     );
   }
 
@@ -177,7 +198,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks
     );
   }
 
@@ -201,7 +223,8 @@ export class ActionClientBuilder<
       logger,
       this._retryConfig,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks
     );
   }
 
@@ -223,7 +246,8 @@ export class ActionClientBuilder<
       this._logger,
       config,
       this._rateLimitConfig,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks
     );
   }
 
@@ -248,7 +272,8 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       config,
-      this._validationOptions
+      this._validationOptions,
+      this._hooks
     );
   }
 
@@ -276,7 +301,77 @@ export class ActionClientBuilder<
       this._logger,
       this._retryConfig,
       this._rateLimitConfig,
-      options
+      options,
+      this._hooks
+    );
+  }
+
+  /**
+   * Register a hook callback for a specific event
+   * @param event - The event name to listen for
+   * @param callback - The callback function to execute
+   * @returns A new builder with the hook registered
+   * @example
+   * ```ts
+   * action
+   *   .on('success', async (ctx) => {
+   *     console.log('Action succeeded!', ctx.result);
+   *   })
+   *   .on('error', async (ctx) => {
+   *     console.error('Action failed!', ctx.error);
+   *   })
+   * ```
+   */
+  on<E extends HookEvent>(
+    event: E,
+    callback: E extends 'beforeValidation'
+      ? HookCallback<BeforeValidationContext<TUser>>
+      : E extends 'afterValidation'
+        ? HookCallback<AfterValidationContext<TInput, TUser>>
+        : E extends 'beforeExecution'
+          ? HookCallback<BeforeExecutionContext<TInput, TUser>>
+          : E extends 'afterExecution'
+            ? HookCallback<AfterExecutionContext<TInput, TOutput, TUser>>
+            : E extends 'success'
+              ? HookCallback<SuccessContext<TInput, TOutput, TUser>>
+              : E extends 'error'
+                ? HookCallback<ErrorContext<TInput, TUser>>
+                : E extends 'authError'
+                  ? HookCallback<AuthErrorContext<TUser>>
+                  : E extends 'inputValidationError'
+                    ? HookCallback<InputValidationErrorContext<TUser>>
+                    : E extends 'outputValidationError'
+                      ? HookCallback<
+                          OutputValidationErrorContext<TInput, TUser>
+                        >
+                      : E extends 'serverError'
+                        ? HookCallback<ServerErrorContext<TInput, TUser>>
+                        : E extends 'retry'
+                          ? HookCallback<RetryContext<TUser>>
+                          : E extends 'complete'
+                            ? HookCallback<
+                                CompleteContext<TInput, TOutput, TUser>
+                              >
+                            : never
+  ): ActionClientBuilder<TInput, TOutput, TUser> {
+    const newHooks = { ...this._hooks };
+    const existingCallbacks = (newHooks[event] ||
+      []) as HookCallback<unknown>[];
+    (newHooks[event] as HookCallback<unknown>[]) = [
+      ...existingCallbacks,
+      callback as HookCallback<unknown>,
+    ];
+
+    return new ActionClientBuilder<TInput, TOutput, TUser>(
+      this._inputDto as ClassConstructor<TInput>,
+      this._outputDto as ClassConstructor<TOutput>,
+      this._authHandler,
+      this._middlewares,
+      this._logger,
+      this._retryConfig,
+      this._rateLimitConfig,
+      this._validationOptions,
+      newHooks
     );
   }
 
@@ -300,6 +395,7 @@ export class ActionClientBuilder<
   ): (input?: unknown) => Promise<ActionResult<TOutput>> {
     return async (input: unknown): Promise<ActionResult<TOutput>> => {
       const actionId = Math.random().toString(36).substring(7);
+      const startTime = Date.now();
 
       this._log('info', 'Action started', { actionId, hasInput: !!input });
 
@@ -318,11 +414,33 @@ export class ActionClientBuilder<
               this._log('warn', 'Authentication failed - no user', {
                 actionId,
               });
-              return {
+
+              const authErrorResult = {
                 success: false,
                 error: 'auth',
                 message: 'Authentication required',
-              };
+              } as const;
+
+              // Trigger authError hook
+              await this._triggerHook('authError', {
+                actionId,
+                timestamp: new Date(),
+                user,
+                message: authErrorResult.message,
+                error: new Error('Authentication required'),
+              });
+
+              // Trigger generic error hook
+              await this._triggerHook('error', {
+                actionId,
+                timestamp: new Date(),
+                user,
+                errorType: 'auth',
+                message: authErrorResult.message,
+                error: new Error('Authentication required'),
+              });
+
+              return authErrorResult;
             }
 
             user = currentUser;
@@ -332,11 +450,33 @@ export class ActionClientBuilder<
               actionId,
               error: formatError(error),
             });
-            return {
+
+            const authErrorResult = {
               success: false,
               error: 'auth',
               message: 'Authentication failed',
-            };
+            } as const;
+
+            // Trigger authError hook
+            await this._triggerHook('authError', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              message: authErrorResult.message,
+              error,
+            });
+
+            // Trigger generic error hook
+            await this._triggerHook('error', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              errorType: 'auth',
+              message: authErrorResult.message,
+              error,
+            });
+
+            return authErrorResult;
           }
         }
 
@@ -345,6 +485,14 @@ export class ActionClientBuilder<
 
         if (this._inputDto) {
           this._log('debug', 'Validating input', { actionId });
+
+          // Trigger beforeValidation hook
+          await this._triggerHook('beforeValidation', {
+            actionId,
+            timestamp: new Date(),
+            user,
+            rawInput: input,
+          });
 
           const validationResult = await validateData(
             this._inputDto as ClassConstructor<object>,
@@ -360,16 +508,47 @@ export class ActionClientBuilder<
               details: validationResult.details,
             });
 
-            return {
+            const inputErrorResult = {
               success: false,
               error: 'input',
               message: formatValidationErrors(validationResult.details),
               details: validationResult.details,
-            };
+            } as const;
+
+            // Trigger inputValidationError hook
+            await this._triggerHook('inputValidationError', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              rawInput: input,
+              message: inputErrorResult.message,
+              details: validationResult.details,
+            });
+
+            // Trigger generic error hook
+            await this._triggerHook('error', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              errorType: 'input',
+              message: inputErrorResult.message,
+              error: validationResult.details,
+            });
+
+            return inputErrorResult;
           }
 
           parsedInput = validationResult.instance as TInput;
           this._log('debug', 'Input validation successful', { actionId });
+
+          // Trigger afterValidation hook
+          await this._triggerHook('afterValidation', {
+            actionId,
+            timestamp: new Date(),
+            user,
+            rawInput: input,
+            validatedInput: parsedInput,
+          });
         }
 
         // 3. Create context
@@ -382,6 +561,14 @@ export class ActionClientBuilder<
         try {
           this._log('debug', 'Executing handler', { actionId });
 
+          // Trigger beforeExecution hook
+          await this._triggerHook('beforeExecution', {
+            actionId,
+            timestamp: new Date(),
+            user,
+            parsedInput,
+          });
+
           const executeWithMiddlewares = async (): Promise<
             ActionResult<TOutput>
           > => {
@@ -392,6 +579,15 @@ export class ActionClientBuilder<
 
             let chain: () => Promise<ActionResult<TOutput>> = async () => {
               const data = await execute();
+
+              // Trigger afterExecution hook
+              await this._triggerHook('afterExecution', {
+                actionId,
+                timestamp: new Date(),
+                user,
+                parsedInput,
+                rawOutput: data,
+              });
 
               // 5. Output validation
               if (this._outputDto) {
@@ -411,14 +607,38 @@ export class ActionClientBuilder<
                     details: outputValidationResult.details,
                   });
 
-                  return {
+                  const outputErrorResult = {
                     success: false,
                     error: 'output',
                     message: formatValidationErrors(
                       outputValidationResult.details
                     ),
                     details: outputValidationResult.details,
-                  };
+                  } as const;
+
+                  // Trigger outputValidationError hook
+                  await this._triggerHook('outputValidationError', {
+                    actionId,
+                    timestamp: new Date(),
+                    user,
+                    parsedInput,
+                    rawOutput: data,
+                    message: outputErrorResult.message,
+                    details: outputValidationResult.details,
+                  });
+
+                  // Trigger generic error hook
+                  await this._triggerHook('error', {
+                    actionId,
+                    timestamp: new Date(),
+                    user,
+                    errorType: 'output',
+                    message: outputErrorResult.message,
+                    error: outputValidationResult.details,
+                    parsedInput,
+                  });
+
+                  return outputErrorResult;
                 }
 
                 this._log('debug', 'Output validation successful', {
@@ -450,6 +670,16 @@ export class ActionClientBuilder<
 
           if (result.success) {
             this._log('info', 'Action completed successfully', { actionId });
+
+            // Trigger success hook
+            await this._triggerHook('success', {
+              actionId,
+              timestamp: new Date(),
+              user,
+              parsedInput,
+              result,
+              duration: Date.now() - startTime,
+            });
           } else {
             this._log('warn', 'Action completed with error', {
               actionId,
@@ -466,12 +696,36 @@ export class ActionClientBuilder<
             cause: error,
           });
 
-          return {
+          const serverErrorResult = {
             success: false,
             error: 'server',
             message: formatError(error),
             cause: error,
-          };
+          } as const;
+
+          // Trigger serverError hook
+          await this._triggerHook('serverError', {
+            actionId,
+            timestamp: new Date(),
+            user,
+            parsedInput,
+            message: serverErrorResult.message,
+            cause: error,
+            error,
+          });
+
+          // Trigger generic error hook
+          await this._triggerHook('error', {
+            actionId,
+            timestamp: new Date(),
+            user,
+            errorType: 'server',
+            message: serverErrorResult.message,
+            error,
+            parsedInput,
+          });
+
+          return serverErrorResult;
         }
       };
 
@@ -483,27 +737,63 @@ export class ActionClientBuilder<
         });
 
         let lastResult: ActionResult<TOutput> | undefined;
+        let currentAttempt = 0;
 
         try {
-          return await withRetry(async () => {
-            const result = await executeAction();
+          const executeWithRetryHook = async (): Promise<
+            ActionResult<TOutput>
+          > => {
+            try {
+              currentAttempt++;
 
-            // If the action succeeded, return the result
-            if (result.success) {
+              if (currentAttempt > 1 && this._retryConfig) {
+                // Calculate delay for retry hook
+                const delay =
+                  this._retryConfig.backoff === 'exponential'
+                    ? this._retryConfig.delay * Math.pow(2, currentAttempt - 2)
+                    : this._retryConfig.delay * (currentAttempt - 1);
+
+                // Trigger retry hook
+                await this._triggerHook('retry', {
+                  actionId,
+                  timestamp: new Date(),
+                  user: undefined,
+                  attempt: currentAttempt,
+                  maxAttempts: this._retryConfig.attempts,
+                  delay,
+                  error: lastResult,
+                });
+              }
+
+              const result = await executeAction();
+
+              // If the action succeeded, return the result
+              if (result.success) {
+                return result;
+              }
+
+              // Store the last error result
+              lastResult = result;
+
+              // For server errors, throw to trigger retry
+              if (result.error === 'server') {
+                throw new Error(result.message);
+              }
+
+              // For validation or auth errors, don't retry
               return result;
+            } catch (error) {
+              lastResult = {
+                success: false,
+                error: 'server',
+                message: formatError(error),
+                cause: error,
+              } as ActionResult<TOutput>;
+              throw error;
             }
+          };
 
-            // Store the last error result
-            lastResult = result;
-
-            // For server errors, throw to trigger retry
-            if (result.error === 'server') {
-              throw new Error(result.message);
-            }
-
-            // For validation or auth errors, don't retry
-            return result;
-          }, this._retryConfig);
+          return await withRetry(executeWithRetryHook, this._retryConfig);
         } catch (error) {
           this._log('error', 'All retry attempts failed', {
             actionId,
@@ -521,10 +811,42 @@ export class ActionClientBuilder<
             message: formatError(error),
             cause: error,
           };
+        } finally {
+          // Trigger complete hook
+          const duration = Date.now() - startTime;
+          const finalResult =
+            lastResult ||
+            ({
+              success: false,
+              error: 'server',
+              message: 'Unknown error',
+            } as ActionResult<TOutput>);
+
+          await this._triggerHook('complete', {
+            actionId,
+            timestamp: new Date(),
+            user: undefined,
+            parsedInput: undefined,
+            result: finalResult,
+            duration,
+          });
         }
       }
 
-      return await executeAction();
+      const result = await executeAction();
+
+      // Trigger complete hook for non-retry case
+      const duration = Date.now() - startTime;
+      await this._triggerHook('complete', {
+        actionId,
+        timestamp: new Date(),
+        user: undefined,
+        parsedInput: undefined,
+        result,
+        duration,
+      });
+
+      return result;
     };
   }
 
@@ -539,6 +861,33 @@ export class ActionClientBuilder<
   ): void {
     if (this._logger) {
       this._logger(level, message, meta);
+    }
+  }
+
+  /**
+   * Internal hook trigger helper
+   * @private
+   */
+  private async _triggerHook(
+    event: HookEvent,
+    context: unknown
+  ): Promise<void> {
+    const callbacks = this._hooks[event] as HookCallback<unknown>[] | undefined;
+    if (!callbacks || callbacks.length === 0) {
+      return;
+    }
+
+    // Execute all hooks for this event
+    for (const callback of callbacks) {
+      try {
+        await callback(context);
+      } catch (error) {
+        // Log hook errors but don't throw them
+        this._log('error', `Hook "${event}" failed`, {
+          error: formatError(error),
+          cause: error,
+        });
+      }
     }
   }
 

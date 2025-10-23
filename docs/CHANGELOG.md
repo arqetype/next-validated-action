@@ -17,6 +17,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Middleware system for intercepting action execution
 - Retry logic with configurable backoff strategies (linear/exponential)
 - Built-in logging and observability support
+- **Lifecycle hooks system** - 12 hook events for observability and telemetry:
+  - Lifecycle hooks: `beforeValidation`, `afterValidation`, `beforeExecution`, `afterExecution`
+  - Success hook: `success`
+  - Error hooks: `error`, `authError`, `inputValidationError`, `outputValidationError`, `serverError`
+  - Retry hook: `retry`
+  - Completion hook: `complete`
+  - Multiple hooks of the same type supported
+  - Async and sync callback support
+  - Type-safe context objects for each hook
+  - Non-breaking error handling (hook errors won't fail actions)
 - Rate limit metadata configuration
 - Custom validation options support
 - Type guard utilities (isSuccess, isError, isInputError, etc.)
@@ -26,8 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Support for nested object validation
 - Action composition patterns
 - Fluent builder API
-- Complete test coverage with Jest
-- Comprehensive documentation (API Reference, Advanced Usage Guide)
+- Complete test coverage with Jest (196 tests including 37 hooks tests)
+- Comprehensive documentation (API Reference, Advanced Usage Guide, Hooks Guide)
 - Example usage files
 - Contributing guidelines
 

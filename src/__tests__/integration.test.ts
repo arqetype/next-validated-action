@@ -14,7 +14,6 @@ import { Type } from 'class-transformer';
 import { action } from '../builder';
 import {
   isSuccess,
-  isError,
   isInputError,
   isServerError,
   isAuthError,
@@ -442,7 +441,7 @@ describe('Integration Tests - Real World Scenarios', () => {
     it('should compose authenticated action base', async () => {
       const authenticatedAction = action
         .needsAuth(async () => mockRegularUser)
-        .logger((level, message) => {
+        .logger((_level, _message) => {
           // Silent logger for tests
         });
 

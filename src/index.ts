@@ -10,6 +10,22 @@ export type {
   RateLimitConfig,
   ValidationOptions,
   ValidationError,
+  HookEvent,
+  HookCallback,
+  HookCallbacks,
+  BaseHookContext,
+  BeforeValidationContext,
+  AfterValidationContext,
+  BeforeExecutionContext,
+  AfterExecutionContext,
+  SuccessContext,
+  ErrorContext,
+  AuthErrorContext,
+  InputValidationErrorContext,
+  OutputValidationErrorContext,
+  ServerErrorContext,
+  RetryContext,
+  CompleteContext,
 } from './types';
 
 export { ActionClientBuilder, action } from './builder';
