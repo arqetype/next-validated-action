@@ -1,0 +1,27 @@
+# This file defines the code owners for the repository.
+# Code owners are automatically requested for review when someone opens a pull request that modifies code that they own.
+# See https://docs.github.com/en/repositories/managing-your-repositorys-settings-and-features/customizing-your-repository/about-code-owners
+
+# Default owners for everything in the repo
+* @arqetype
+
+# Documentation
+/docs/ @arqetype
+*.md @arqetype
+
+# Source code
+/src/ @arqetype
+
+# Configuration files
+*.json @arqetype
+*.js @arqetype
+*.ts @arqetype
+tsconfig.json @arqetype
+jest.config.ts @arqetype
+eslint.config.ts @arqetype
+
+# CI/CD
+/.github/ @arqetype
+
+# Examples
+/examples/ @arqetype
