@@ -1,6 +1,7 @@
 {
   "name": "@arqetype/next-validated-action",
   "version": "1.0.0",
+  "type": "module",
   "description": "Type-safe Next.js server actions with class-validator validation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
