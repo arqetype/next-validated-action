@@ -132,7 +132,11 @@ export const createUserAction = action
 
 ```typescript
 import { myAction } from './actions';
-import { isSuccess, isInputError, isServerError } from '@arqetype/next-validated-action';
+import {
+  isSuccess,
+  isInputError,
+  isServerError,
+} from '@arqetype/next-validated-action';
 
 async function handleAction(data: any) {
   const result = await myAction(data);

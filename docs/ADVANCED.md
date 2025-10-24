@@ -391,7 +391,11 @@ export const updateUserAction = action
 ### Using Type Guards
 
 ```typescript
-import { isSuccess, isInputError, isServerError } from '@arqetype/next-validated-action';
+import {
+  isSuccess,
+  isInputError,
+  isServerError,
+} from '@arqetype/next-validated-action';
 
 const result = await myAction({ data: 'test' });
 

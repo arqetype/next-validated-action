@@ -1,6 +1,7 @@
 {
   "name": "@arqetype/next-validated-action",
   "version": "1.0.0",
+  "type": "module",
   "description": "Type-safe Next.js server actions with class-validator validation",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -9,6 +10,11 @@
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js",
       "require": "./dist/index.js"
+    },
+    "./testing": {
+      "types": "./dist/testing/index.d.ts",
+      "import": "./dist/testing/index.js",
+      "require": "./dist/testing/index.js"
     }
   },
   "sideEffects": false,
@@ -40,11 +46,11 @@
     "middleware",
     "retry"
   ],
-  "author": "",
+  "author": "arqetype",
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": ""
+    "url": "https://github.com/arqetype/next-validated-action"
   },
   "peerDependencies": {
     "class-transformer": "^0.5.0",

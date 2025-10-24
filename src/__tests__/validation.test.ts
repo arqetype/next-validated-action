@@ -7,7 +7,9 @@ import {
   IsNumber,
   Min,
   Max,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { validateData, formatValidationErrors } from '../validation';
 import type { ValidationError } from '../types';
 
@@ -30,6 +32,30 @@ class ComplexDto {
   @Min(0)
   @Max(120)
   age: number;
+}
+
+class AddressDto {
+  @IsString()
+  @IsNotEmpty()
+  street: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+
+  @IsString()
+  @IsNotEmpty()
+  zipCode: string;
+}
+
+class UserWithAddressDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address: AddressDto;
 }
 
 describe('validateData', () => {
@@ -186,6 +212,92 @@ describe('validateData', () => {
         expect(result.details.length).toBeGreaterThan(0);
       }
     });
+
+    it('should apply whitelist option', async () => {
+      const data = {
+        name: 'John Doe',
+        email: 'john@example.com',
+        extraField: 'should be removed',
+      };
+
+      const result = await validateData(SimpleDto, data, 'Invalid', {
+        whitelist: true,
+      });
+
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.instance.name).toBe('John Doe');
+        expect(result.instance.email).toBe('john@example.com');
+        expect((result.instance as any).extraField).toBeUndefined();
+      }
+    });
+  });
+
+  describe('nested validation', () => {
+    it('should validate nested objects successfully', async () => {
+      const data = {
+        name: 'John Doe',
+        address: {
+          street: '123 Main St',
+          city: 'New York',
+          zipCode: '10001',
+        },
+      };
+
+      const result = await validateData(UserWithAddressDto, data);
+
+      expect(result.valid).toBe(true);
+      if (result.valid) {
+        expect(result.instance).toBeInstanceOf(UserWithAddressDto);
+        expect(result.instance.name).toBe('John Doe');
+        expect(result.instance.address.city).toBe('New York');
+      }
+    });
+
+    it('should fail validation for invalid nested objects', async () => {
+      const data = {
+        name: 'John Doe',
+        address: {
+          street: '',
+          city: '',
+          zipCode: '',
+        },
+      };
+
+      const result = await validateData(UserWithAddressDto, data);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        expect(result.errors.length).toBeGreaterThan(0);
+        expect(result.details.length).toBeGreaterThan(0);
+        // Check for nested field errors
+        expect(result.details.some((d) => d.field.includes('address'))).toBe(
+          true
+        );
+      }
+    });
+
+    it('should report nested field names correctly', async () => {
+      const data = {
+        name: 'John Doe',
+        address: {
+          street: '',
+          city: 'New York',
+          zipCode: '10001',
+        },
+      };
+
+      const result = await validateData(UserWithAddressDto, data);
+
+      expect(result.valid).toBe(false);
+      if (!result.valid) {
+        const streetError = result.details.find((d) =>
+          d.field.includes('street')
+        );
+        expect(streetError).toBeDefined();
+        expect(streetError?.field).toContain('address');
+      }
+    });
   });
 });
 
@@ -243,5 +355,37 @@ describe('formatValidationErrors', () => {
     const message = formatValidationErrors([]);
 
     expect(message).toBe('Validation failed');
+  });
+
+  it('should format nested field errors', () => {
+    const details: ValidationError[] = [
+      {
+        field: 'address.street',
+        constraints: ['should not be empty'],
+      },
+      {
+        field: 'address.city',
+        constraints: ['should not be empty'],
+      },
+    ];
+
+    const message = formatValidationErrors(details);
+
+    expect(message).toContain('2 field(s)');
+    expect(message).toContain('address.street');
+    expect(message).toContain('address.city');
+  });
+
+  it('should handle single constraint with nested field', () => {
+    const details: ValidationError[] = [
+      {
+        field: 'user.profile.bio',
+        constraints: ['must be longer than 10 characters'],
+      },
+    ];
+
+    const message = formatValidationErrors(details);
+
+    expect(message).toBe('user.profile.bio: must be longer than 10 characters');
   });
 });

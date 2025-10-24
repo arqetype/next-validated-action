@@ -5,7 +5,9 @@ import {
   IsNotEmpty,
   MinLength,
   IsNumber,
+  ValidateNested,
 } from 'class-validator';
+import { Type } from 'class-transformer';
 import { action } from '../builder';
 import {
   isSuccess,
@@ -42,6 +44,26 @@ class PasswordInput {
 class NumericOutput {
   @IsNumber()
   value: number;
+}
+
+class AddressDto {
+  @IsString()
+  @IsNotEmpty()
+  street: string;
+
+  @IsString()
+  @IsNotEmpty()
+  city: string;
+}
+
+class UserWithAddressDto {
+  @IsString()
+  @IsNotEmpty()
+  name: string;
+
+  @ValidateNested()
+  @Type(() => AddressDto)
+  address: AddressDto;
 }
 
 describe('ActionClientBuilder', () => {
@@ -620,6 +642,312 @@ describe('ActionClientBuilder', () => {
 
     it('should return undefined when not configured', () => {
       expect(action.getRateLimitConfig()).toBeUndefined();
+    });
+  });
+
+  describe('nested validation', () => {
+    it('should validate nested objects successfully', async () => {
+      const testAction = action
+        .inputDto(UserWithAddressDto)
+        .action(async ({ parsedInput }) => {
+          return {
+            userName: parsedInput.name,
+            userCity: parsedInput.address.city,
+          };
+        });
+
+      const result = await testAction({
+        name: 'John Doe',
+        address: {
+          street: '123 Main St',
+          city: 'New York',
+        },
+      });
+
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect((result.data as any).userName).toBe('John Doe');
+        expect((result.data as any).userCity).toBe('New York');
+      }
+    });
+
+    it('should fail validation for invalid nested objects', async () => {
+      const testAction = action
+        .inputDto(UserWithAddressDto)
+        .action(async ({ parsedInput: _parsedInput }) => {
+          return { success: true };
+        });
+
+      const result = await testAction({
+        name: 'John Doe',
+        address: {
+          street: '',
+          city: '',
+        },
+      });
+
+      expect(isInputError(result)).toBe(true);
+      if (isInputError(result)) {
+        expect(result.details).toBeDefined();
+        expect(result.details!.length).toBeGreaterThan(0);
+      }
+    });
+  });
+
+  describe('action composition', () => {
+    it('should support creating base authenticated actions', async () => {
+      const mockUser = { id: 'user123', role: 'user' };
+
+      const authenticatedAction = action.needsAuth(async () => mockUser);
+
+      const profileAction = authenticatedAction
+        .inputDto(TestInput)
+        .action(async ({ parsedInput, user }) => {
+          return {
+            userId: user?.id,
+            name: parsedInput.name,
+          };
+        });
+
+      const result = await profileAction({
+        name: 'John',
+        email: 'john@example.com',
+      });
+
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        expect((result.data as any).userId).toBe('user123');
+      }
+    });
+
+    it('should support composing actions with middleware', async () => {
+      const calls: string[] = [];
+
+      const baseAction = action.use(async (_ctx, next) => {
+        calls.push('base-middleware');
+        return await next();
+      });
+
+      const extendedAction = baseAction
+        .use(async (_ctx, next) => {
+          calls.push('extended-middleware');
+          return await next();
+        })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          calls.push('handler');
+          return { success: true };
+        });
+
+      await extendedAction({});
+
+      expect(calls).toEqual([
+        'base-middleware',
+        'extended-middleware',
+        'handler',
+      ]);
+    });
+  });
+
+  describe('retry with different error types', () => {
+    it('should not retry on input validation errors', async () => {
+      let attempts = 0;
+
+      const testAction = action
+        .inputDto(TestInput)
+        .retry({ attempts: 3, delay: 10 })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          attempts++;
+          return { success: true };
+        });
+
+      const result = await testAction({ name: '', email: 'invalid' });
+
+      expect(isInputError(result)).toBe(true);
+      expect(attempts).toBe(0); // Handler should not be called
+    });
+
+    it('should not retry on auth errors', async () => {
+      let attempts = 0;
+
+      const testAction = action
+        .needsAuth(async () => null)
+        .retry({ attempts: 3, delay: 10 })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          attempts++;
+          return { success: true };
+        });
+
+      const result = await testAction({});
+
+      expect(isAuthError(result)).toBe(true);
+      expect(attempts).toBe(0); // Handler should not be called
+    });
+
+    it('should succeed on second retry attempt', async () => {
+      let attempts = 0;
+
+      const testAction = action
+        .retry({ attempts: 3, delay: 10 })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          attempts++;
+          if (attempts < 2) {
+            throw new Error('Temporary failure');
+          }
+          return { success: true, attempts };
+        });
+
+      const result = await testAction({});
+
+      expect(isSuccess(result)).toBe(true);
+      expect(attempts).toBe(2);
+    });
+  });
+
+  describe('logger metadata', () => {
+    it('should pass metadata to logger', async () => {
+      const logs: Array<{ level: string; message: string; meta?: any }> = [];
+
+      const testAction = action
+        .logger((level, message, meta) => {
+          logs.push({ level, message, meta });
+        })
+        .inputDto(TestInput)
+        .action(async ({ parsedInput: _parsedInput }) => {
+          return { success: true };
+        });
+
+      await testAction({ name: 'Test', email: 'test@example.com' });
+
+      const startLog = logs.find((log) => log.message === 'Action started');
+      expect(startLog).toBeDefined();
+      expect(startLog?.meta).toBeDefined();
+      expect(startLog?.meta?.actionId).toBeDefined();
+      expect(startLog?.meta?.hasInput).toBe(true);
+    });
+
+    it('should log validation details in metadata', async () => {
+      const logs: Array<{ level: string; message: string; meta?: any }> = [];
+
+      const testAction = action
+        .logger((level, message, meta) => {
+          logs.push({ level, message, meta });
+        })
+        .inputDto(TestInput)
+        .action(async ({ parsedInput: _parsedInput }) => {
+          return { success: true };
+        });
+
+      await testAction({ name: '', email: 'invalid' });
+
+      const validationLog = logs.find(
+        (log) => log.message === 'Input validation failed'
+      );
+      expect(validationLog).toBeDefined();
+      expect(validationLog?.meta?.details).toBeDefined();
+    });
+  });
+
+  describe('middleware error handling', () => {
+    it('should handle errors thrown in middleware', async () => {
+      const testAction = action
+        .use(async (_ctx, _next) => {
+          throw new Error('Middleware error');
+        })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          return { success: true };
+        });
+
+      const result = await testAction({});
+
+      expect(isServerError(result)).toBe(true);
+      if (isServerError(result)) {
+        expect(result.message).toBe('Middleware error');
+      }
+    });
+
+    it('should handle multiple middlewares with one throwing error', async () => {
+      const calls: string[] = [];
+
+      const testAction = action
+        .use(async (_ctx, next) => {
+          calls.push('middleware1-before');
+          try {
+            return await next();
+          } finally {
+            calls.push('middleware1-after');
+          }
+        })
+        .use(async (_ctx, _next) => {
+          calls.push('middleware2-error');
+          throw new Error('Middleware 2 error');
+        })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          calls.push('handler');
+          return { success: true };
+        });
+
+      const result = await testAction({});
+
+      expect(isServerError(result)).toBe(true);
+      expect(calls).toContain('middleware1-before');
+      expect(calls).toContain('middleware2-error');
+      expect(calls).not.toContain('handler');
+    });
+  });
+
+  describe('output validation with instanceToPlain', () => {
+    it('should convert class instances to plain objects in output', async () => {
+      const testAction = action
+        .outputDto(TestOutput)
+        .action(async ({ parsedInput: _parsedInput }) => {
+          return {
+            id: '123',
+            message: 'Test',
+          };
+        });
+
+      const result = await testAction({});
+
+      expect(isSuccess(result)).toBe(true);
+      if (isSuccess(result)) {
+        // Verify it's a plain object, not a class instance
+        expect(Object.getPrototypeOf(result.data)).toBe(Object.prototype);
+        expect(result.data.constructor).toBe(Object);
+      }
+    });
+  });
+
+  describe('exponential backoff precision', () => {
+    it('should use correct exponential backoff delays', async () => {
+      jest.setTimeout(10000);
+      let attempts = 0;
+      const delays: number[] = [];
+      let lastTime = Date.now();
+
+      const testAction = action
+        .retry({ attempts: 4, delay: 50, backoff: 'exponential' })
+        .action(async ({ parsedInput: _parsedInput }) => {
+          const now = Date.now();
+          if (attempts > 0) {
+            delays.push(now - lastTime);
+          }
+          lastTime = now;
+          attempts++;
+          throw new Error('Always fails');
+        });
+
+      await testAction({});
+
+      expect(attempts).toBe(4);
+      // First retry: 50ms * 2^0 = 50ms
+      expect(delays[0]).toBeGreaterThanOrEqual(50);
+      expect(delays[0]).toBeLessThan(100);
+      // Second retry: 50ms * 2^1 = 100ms
+      expect(delays[1]).toBeGreaterThanOrEqual(100);
+      expect(delays[1]).toBeLessThan(150);
+      // Third retry: 50ms * 2^2 = 200ms
+      expect(delays[2]).toBeGreaterThanOrEqual(200);
+      expect(delays[2]).toBeLessThan(300);
     });
   });
 });

@@ -271,9 +271,9 @@ export const updateSettings = authenticatedAction
 ## 🆘 Getting Help
 
 - 📖 Read the [API Reference](./docs/API.md)
-- 💬 Open a [GitHub Discussion](https://github.com/your-username/@arqetype/next-validated-action/discussions)
-- 🐛 Report a [Bug](https://github.com/your-username/@arqetype/next-validated-action/issues)
-- ⭐ Star the project on [GitHub](https://github.com/your-username/@arqetype/next-validated-action)
+- 💬 Open a [GitHub Discussion](https://github.com/arqetype/next-validated-action/discussions)
+- 🐛 Report a [Bug](https://github.com/arqetype/next-validated-action/issues)
+- ⭐ Star the project on [GitHub](https://github.com/arqetype/next-validated-action)
 
 ## 🎉 You're Ready!
 

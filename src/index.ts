@@ -1,6 +1,5 @@
 import 'reflect-metadata';
 
-// Export types
 export type {
   ActionResult,
   ActionContext,
@@ -9,14 +8,32 @@ export type {
   Logger,
   RetryConfig,
   RateLimitConfig,
+  ThrottleConfig,
+  DebounceConfig,
   ValidationOptions,
   ValidationError,
+  CacheConfig,
+  CacheStorage,
+  HookEvent,
+  HookCallback,
+  HookCallbacks,
+  BaseHookContext,
+  BeforeValidationContext,
+  AfterValidationContext,
+  BeforeExecutionContext,
+  AfterExecutionContext,
+  SuccessContext,
+  ErrorContext,
+  AuthErrorContext,
+  InputValidationErrorContext,
+  OutputValidationErrorContext,
+  ServerErrorContext,
+  RetryContext,
+  CompleteContext,
 } from './types';
 
-// Export builder
 export { ActionClientBuilder, action } from './builder';
 
-// Export type guards
 export {
   isSuccess,
   isError,
@@ -28,15 +45,30 @@ export {
   unwrapOr,
 } from './guards';
 
-// Export validation utilities
 export { validateData, formatValidationErrors } from './validation';
 
-// Export utility functions
+export { withRetry, isRetriableError, formatError, deepClone } from './utils';
+
+export type { DebouncedFunction } from './debounce';
+
 export {
-  withRetry,
-  isRetriableError,
-  formatError,
-  deepClone,
   debounce,
-  throttle,
-} from './utils';
+  getOrCreateDebouncedAction,
+  clearDebouncedAction,
+  clearAllDebouncedActions,
+} from './debounce';
+
+export {
+  MemoryCacheStorage,
+  getGlobalMemoryCache,
+  clearGlobalMemoryCache,
+  generateDefaultCacheKey,
+} from './cache';
+
+export {
+  checkThrottle,
+  resetThrottle,
+  resetAllThrottles,
+  getThrottleState,
+  DEFAULT_THROTTLE_IDENTIFIER,
+} from './throttle';

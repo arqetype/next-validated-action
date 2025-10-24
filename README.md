@@ -12,6 +12,9 @@ Type-safe Next.js server actions with comprehensive validation, middleware, retr
 - 🔐 **Authentication** - Flexible authentication handling
 - 🎯 **Structured Error Handling** - Detailed, type-safe error responses
 - 🔄 **Retry Logic** - Automatic retry with configurable backoff strategies
+- ⏱️ **Throttling** - Rate limiting with fixed and sliding window strategies
+- 💾 **Caching/Memoization** - Built-in result caching with configurable storage
+- ⏳ **Debouncing** - Delay execution until inputs stabilize
 - 🎭 **Middleware Support** - Intercept and modify action execution
 - 📊 **Logging & Observability** - Built-in logging capabilities
 - 🚀 **Developer Experience** - Fluent builder pattern API
@@ -149,6 +152,85 @@ export const myAction = action
   });
 ```
 
+### Caching
+
+Cache expensive operations to avoid redundant processing:
+
+```typescript
+export const getUserProfile = action
+  .inputDto(UserInput)
+  .cache({
+    ttl: 60000, // Cache for 60 seconds
+    key: (input) => `user-${input.userId}`, // Custom cache key
+  })
+  .action(async ({ parsedInput }) => {
+    // This expensive query will be cached
+    return await db.user.findUnique({ where: { id: parsedInput.userId } });
+  });
+```
+
+**Advanced caching options:**
+
+```typescript
+import { MemoryCacheStorage } from '@arqetype/next-validated-action';
+
+// Use custom storage instance
+const myCache = new MemoryCacheStorage();
+
+export const cachedAction = action
+  .cache({
+    ttl: 300000, // 5 minutes
+    storage: myCache, // Custom storage
+    cacheErrors: false, // Don't cache errors (default)
+    key: (input) => `custom-${input.id}`, // Custom key generator
+  })
+  .action(async ({ parsedInput }) => {
+    return await expensiveOperation(parsedInput);
+  });
+
+// Get cache statistics
+const stats = myCache.getStats();
+console.log(`Cache size: ${stats.size}, expired: ${stats.expired}`);
+```
+
+See the [Cache Documentation](./docs/CACHE.md) for more details.
+
+### Throttling
+
+Limit execution frequency to prevent abuse and control load:
+
+```typescript
+export const sendMessage = action
+  .inputDto(MessageInput)
+  .throttle({
+    maxCalls: 5, // Maximum 5 calls
+    windowMs: 60000, // Per minute
+    strategy: 'sliding', // or 'fixed'
+    identifier: (ctx) => ctx.user?.id || 'anonymous', // Per-user throttle
+  })
+  .action(async ({ parsedInput }) => {
+    return await sendMessage(parsedInput);
+  });
+```
+
+**When throttle limit is exceeded:**
+
+```typescript
+const result = await sendMessage(input);
+
+if (!result.success && result.message.includes('Too many requests')) {
+  // Error message: "Too many requests. Limit: 5 calls per 60000ms. Try again in 45s."
+  console.error('Rate limit exceeded');
+}
+```
+
+**Throttle strategies:**
+
+- **Fixed window**: Resets counter at fixed intervals (simpler, more efficient)
+- **Sliding window**: Tracks individual timestamps (more accurate, prevents bursts)
+
+See the [Throttle Documentation](./docs/THROTTLE.md) for more details.
+
 ### Logging
 
 Add logging for observability:
@@ -180,6 +262,141 @@ export const myAction = action
     return { success: true };
   });
 ```
+
+### Hooks
+
+Add lifecycle hooks for observability, logging, and telemetry:
+
+```typescript
+export const myAction = action
+  .inputDto(MyInput)
+  .outputDto(MyOutput)
+
+  // Success hook - track successful completions
+  .on('success', async (ctx) => {
+    analytics.track('action_success', {
+      actionId: ctx.actionId,
+      duration: ctx.duration,
+      data: ctx.result.data,
+    });
+  })
+
+  // Error hooks - send to monitoring services
+  .on('error', async (ctx) => {
+    Sentry.captureException(ctx.error, {
+      extra: {
+        actionId: ctx.actionId,
+        errorType: ctx.errorType,
+      },
+    });
+  })
+
+  // Specific error handlers
+  .on('inputValidationError', async (ctx) => {
+    console.error('Validation failed:', ctx.details);
+  })
+
+  .on('serverError', async (ctx) => {
+    logError(ctx.message, ctx.cause);
+  })
+
+  // Lifecycle hooks
+  .on('beforeExecution', async (ctx) => {
+    console.time(`action-${ctx.actionId}`);
+  })
+
+  .on('afterExecution', async (ctx) => {
+    console.timeEnd(`action-${ctx.actionId}`);
+  })
+
+  // Retry monitoring
+  .retry({ attempts: 3, delay: 1000 })
+  .on('retry', async (ctx) => {
+    console.log(`Retry ${ctx.attempt}/${ctx.maxAttempts}`);
+  })
+
+  // Always runs (success or failure)
+  .on('complete', async (ctx) => {
+    await cleanup(ctx.actionId);
+    metrics.record('action.duration', ctx.duration);
+  })
+
+  .action(async ({ parsedInput }) => {
+    return await processData(parsedInput);
+  });
+```
+
+#### Available Hook Events
+
+**Lifecycle Hooks:**
+
+- `beforeValidation` - Before input validation starts
+- `afterValidation` - After successful input validation
+- `beforeExecution` - Before handler execution
+- `afterExecution` - After handler execution
+
+**Success Hook:**
+
+- `success` - Action completed successfully
+
+**Error Hooks:**
+
+- `error` - Any error occurred (catches all error types)
+- `authError` - Authentication failed
+- `inputValidationError` - Input validation failed
+- `outputValidationError` - Output validation failed (bug in handler)
+- `serverError` - Handler threw an error
+
+**Other Hooks:**
+
+- `retry` - Retry attempt is happening
+- `complete` - Always called at the end (success or failure)
+
+#### Hook Context
+
+Each hook receives a context object with relevant data:
+
+```typescript
+// Example: success hook context
+{
+  actionId: string;        // Unique action execution ID
+  timestamp: Date;         // When the hook fired
+  user?: TUser;           // Authenticated user (if any)
+  parsedInput: TInput;    // Validated input
+  result: { success: true; data: TOutput };
+  duration: number;       // Execution time in ms
+}
+
+// Example: error hook context
+{
+  actionId: string;
+  timestamp: Date;
+  user?: TUser;
+  errorType: 'auth' | 'input' | 'output' | 'server';
+  message: string;
+  error: unknown;         // The actual error
+  parsedInput?: TInput;
+}
+```
+
+#### Async Hooks
+
+Hooks can be async (awaited) or sync (fire-and-forget):
+
+```typescript
+action
+  // Async - waits for completion
+  .on('success', async (ctx) => {
+    await auditLog.record(ctx.result);
+  })
+
+  // Sync - fire and forget
+  .on('error', (ctx) => {
+    errorTracker.capture(ctx.error);
+  });
+```
+
+**Note:** Hooks are non-breaking - if a hook throws an error, it will be logged but won't affect the action result.
 
 ## 🎯 Error Handling
 
@@ -242,8 +459,10 @@ const data = unwrapOr(await myAction({ input: 'test' }), { default: true });
 - `.use(middleware)` - Add middleware
 - `.logger(logger)` - Configure logging
 - `.retry(config)` - Configure retry logic
+- `.cache(config)` - Configure caching/memoization
 - `.rateLimit(config)` - Store rate limit metadata
 - `.validationOptions(options)` - Configure validation options
+- `.on(event, callback)` - Register a lifecycle hook
 - `.action(handler)` - Define the action handler
 
 ### Result Type
@@ -388,6 +607,9 @@ export const deleteUser = adminAction
 ## 📝 Documentation
 
 - [API Reference](./docs/API.md) - Complete API documentation
+- [Cache Documentation](./docs/CACHE.md) - Caching and memoization guide
+- [Throttle Documentation](./docs/THROTTLE.md) - Rate limiting and throttling guide
+- [Debounce Documentation](./docs/DEBOUNCE.md) - Debouncing guide
 - [Advanced Usage](./docs/ADVANCED.md) - Advanced patterns and examples
 - [Contributing](./CONTRIBUTING.md) - Contribution guidelines
 
@@ -410,7 +632,7 @@ Contributions are welcome! Please read our [Contributing Guide](./CONTRIBUTING.m
 
 ## 📄 License
 
-MIT © [Your Name]
+MIT © [arqetype](https://github.com/arqetype)
 
 ## 🙏 Acknowledgments
 
@@ -424,6 +646,7 @@ Check out the [examples](./examples) directory for more usage examples:
 
 - Basic CRUD operations
 - Authentication patterns
+- Caching strategies
 - Middleware usage
 - Error handling strategies
 - Complex validation scenarios
@@ -431,9 +654,9 @@ Check out the [examples](./examples) directory for more usage examples:
 ## 🔗 Links
 
 - [Documentation](./docs)
-- [GitHub Repository](https://github.com/your-username/@arqetype/next-validated-action)
+- [GitHub Repository](https://github.com/arqetype/next-validated-action)
 - [NPM Package](https://www.npmjs.com/package/@arqetype/next-validated-action)
-- [Issue Tracker](https://github.com/your-username/@arqetype/next-validated-action/issues)
+- [Issue Tracker](https://github.com/arqetype/next-validated-action/issues)
 
 ## ⚡ Performance
 
