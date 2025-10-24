@@ -37,9 +37,9 @@ class SendMessageInput {
 export const sendMessage = action
   .inputDto(SendMessageInput)
   .throttle({
-    maxCalls: 5,        // Maximum 5 calls
-    windowMs: 60000,    // Per minute (60,000ms)
-    strategy: 'fixed',  // Fixed time window
+    maxCalls: 5, // Maximum 5 calls
+    windowMs: 60000, // Per minute (60,000ms)
+    strategy: 'fixed', // Fixed time window
   })
   .action(async ({ parsedInput }) => {
     // Send message logic
@@ -84,6 +84,7 @@ The time window in milliseconds.
 ```
 
 Common window values:
+
 - 1 second: `1000`
 - 1 minute: `60000`
 - 5 minutes: `300000`
@@ -128,20 +129,24 @@ Resets the counter at fixed intervals. Simpler and more memory-efficient.
 ```
 
 **How it works:**
+
 - Window starts at first call
 - Counter resets completely when window expires
 - All calls within a window count against the limit
 
 **Pros:**
+
 - Lower memory usage
 - Simpler logic
 - Predictable reset times
 
 **Cons:**
+
 - Can allow burst traffic at window boundaries
 - Less granular control
 
 **Example:**
+
 ```
 Time:     0s   10s   20s   30s   40s   50s   60s   70s
 Calls:    ●●●  ●●    -     -     -     -     ●●●●● ●●
@@ -162,20 +167,24 @@ Tracks individual call timestamps for more accurate rate limiting.
 ```
 
 **How it works:**
+
 - Tracks timestamp of each call
 - Removes expired timestamps from the window
 - Allows new calls as old ones expire
 
 **Pros:**
+
 - More accurate rate limiting
 - Prevents burst traffic
 - Smoother distribution of calls
 
 **Cons:**
+
 - Higher memory usage (stores timestamps)
 - Slightly more complex
 
 **Example:**
+
 ```
 Time:     0s   10s   20s   30s   40s   50s   60s   70s
 Calls:    ●●●  ●●    -     ●     -     -     ●     ●
@@ -282,8 +291,9 @@ Invalid inputs fail validation before hitting the throttle:
 
 ```typescript
 export const submitForm = action
-  .inputDto(FormInput)  // Validated first
-  .throttle({           // Then throttle
+  .inputDto(FormInput) // Validated first
+  .throttle({
+    // Then throttle
     maxCalls: 5,
     windowMs: 60000,
   })
@@ -359,11 +369,13 @@ export const callExternalAPI = action
   .inputDto(ApiInput)
   .throttle({
     maxCalls: 100,
-    windowMs: 60000,  // 100 calls per minute
+    windowMs: 60000, // 100 calls per minute
     strategy: 'sliding',
   })
   .action(async ({ parsedInput }) => {
-    const response = await fetch(`https://api.example.com/${parsedInput.endpoint}`);
+    const response = await fetch(
+      `https://api.example.com/${parsedInput.endpoint}`
+    );
     return await response.json();
   });
 ```
@@ -375,7 +387,7 @@ export const sendEmail = action
   .inputDto(EmailInput)
   .throttle({
     maxCalls: 10,
-    windowMs: 300000,  // 10 emails per 5 minutes
+    windowMs: 300000, // 10 emails per 5 minutes
     strategy: 'sliding',
     identifier: (ctx) => ctx.parsedInput?.to || 'unknown',
   })
@@ -392,7 +404,7 @@ export const resetPassword = action
   .inputDto(ResetPasswordInput)
   .throttle({
     maxCalls: 2,
-    windowMs: 3600000,  // 2 attempts per hour
+    windowMs: 3600000, // 2 attempts per hour
     strategy: 'sliding',
     identifier: (ctx) => ctx.parsedInput?.email || 'unknown',
   })
@@ -409,7 +421,7 @@ export const submitContactForm = action
   .inputDto(ContactFormInput)
   .throttle({
     maxCalls: 5,
-    windowMs: 60000,  // 5 submissions per minute
+    windowMs: 60000, // 5 submissions per minute
     strategy: 'fixed',
   })
   .action(async ({ parsedInput }) => {
@@ -425,7 +437,7 @@ export const search = action
   .inputDto(SearchInput)
   .throttle({
     maxCalls: 20,
-    windowMs: 10000,  // 20 searches per 10 seconds
+    windowMs: 10000, // 20 searches per 10 seconds
     strategy: 'sliding',
   })
   .action(async ({ parsedInput }) => {
@@ -651,7 +663,7 @@ class RedisThrottleStorage {
     multi.pexpire(key, windowMs);
     const results = await multi.exec();
     const count = results[0][1] as number;
-    
+
     return {
       allowed: count <= maxCalls,
       current: count,
@@ -670,10 +682,13 @@ When throttle limit is exceeded:
 const result = await throttledAction(input);
 
 if (!result.success) {
-  if (result.error === 'server' && result.message.includes('Too many requests')) {
+  if (
+    result.error === 'server' &&
+    result.message.includes('Too many requests')
+  ) {
     // Handle throttle error
     console.error('Throttle limit exceeded');
-    
+
     // Extract reset time
     const retryMatch = result.message.match(/Try again in (\d+)s/);
     if (retryMatch) {

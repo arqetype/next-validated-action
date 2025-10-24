@@ -45,11 +45,13 @@ A comprehensive mock builder for creating test doubles of server actions with th
 #### 2. Helper Functions
 
 **Mock Creation:**
+
 - `createMockAction<TAction>(action?)` - Create mock with type inference
 - `createTestContext<TInput, TUser>(input, user?)` - Create action context
 - `createMockAuthHandler<TUser>(user)` - Create mock auth handler
 
 **Result Creators:**
+
 - `createSuccessResult<T>(data)` - Create success result
 - `createAuthErrorResult<T>(message?)` - Create auth error
 - `createInputErrorResult<T>(errors, message?)` - Create input error
@@ -58,10 +60,12 @@ A comprehensive mock builder for creating test doubles of server actions with th
 - `createValidationError(field, ...constraints)` - Create validation error object
 
 **Hook Testing:**
+
 - `HookSpy<TContext>` class - Spy for hook callbacks
 - `createHookSpy<TContext>()` - Create hook spy instance
 
 **Async Testing Utilities:**
+
 - `waitFor(condition, options)` - Wait for condition to be true
 - `wait(ms)` - Simple delay utility
 - `createDeferred<T>()` - Create deferred promise
@@ -103,6 +107,7 @@ Added subpath export for testing utilities:
 #### 2. Usage Examples (`examples/testing-example.ts`)
 
 13 comprehensive examples demonstrating:
+
 - Basic mocking
 - Validation error mocking
 - Authentication mocking
@@ -120,6 +125,7 @@ Added subpath export for testing utilities:
 #### 3. Complete Documentation (`docs/testing-utilities.md`)
 
 Detailed documentation including:
+
 - Quick start guide
 - Complete API reference
 - Usage examples for all features
@@ -134,7 +140,11 @@ Detailed documentation including:
 All utilities maintain full TypeScript type safety:
 
 ```typescript
-const builder = new MockActionBuilder<CreateUserInput, CreateUserOutput, User>();
+const builder = new MockActionBuilder<
+  CreateUserInput,
+  CreateUserOutput,
+  User
+>();
 ```
 
 ### 2. Fluent API
@@ -218,6 +228,7 @@ builder.mockImplementation(async (input, context) => {
 ### 1. Separate Entry Point
 
 Testing utilities are exported from `@arqetype/next-validated-action/testing` to:
+
 - Keep the main package lean
 - Avoid bundling test utilities in production
 - Provide clear separation of concerns
@@ -225,6 +236,7 @@ Testing utilities are exported from `@arqetype/next-validated-action/testing` to
 ### 2. Builder Pattern
 
 MockActionBuilder uses a builder pattern to:
+
 - Provide a fluent, chainable API
 - Make test setup readable and maintainable
 - Allow progressive configuration
@@ -232,6 +244,7 @@ MockActionBuilder uses a builder pattern to:
 ### 3. Hook Simulation
 
 Mocks simulate the actual hook lifecycle to:
+
 - Ensure consistent behavior between mocks and real actions
 - Allow testing hook-dependent code
 - Verify hook execution order
@@ -239,6 +252,7 @@ Mocks simulate the actual hook lifecycle to:
 ### 4. Type Inference
 
 The `createMockAction()` function supports type inference from real actions to:
+
 - Reduce type annotations in tests
 - Maintain type safety
 - Improve developer experience
@@ -246,6 +260,7 @@ The `createMockAction()` function supports type inference from real actions to:
 ### 5. Call Tracking
 
 Built-in call tracking provides:
+
 - Assertion capabilities without additional mocking libraries
 - Simple API for common test scenarios
 - History management for complex tests
@@ -291,7 +306,10 @@ The utilities work with any testing framework:
 ## Usage Example
 
 ```typescript
-import { createMockAction, createValidationError } from '@arqetype/next-validated-action/testing';
+import {
+  createMockAction,
+  createValidationError,
+} from '@arqetype/next-validated-action/testing';
 import { isSuccess, isInputError } from '@arqetype/next-validated-action';
 
 describe('myAction', () => {

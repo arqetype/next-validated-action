@@ -203,8 +203,8 @@ Limit execution frequency to prevent abuse and control load:
 export const sendMessage = action
   .inputDto(MessageInput)
   .throttle({
-    maxCalls: 5,        // Maximum 5 calls
-    windowMs: 60000,    // Per minute
+    maxCalls: 5, // Maximum 5 calls
+    windowMs: 60000, // Per minute
     strategy: 'sliding', // or 'fixed'
     identifier: (ctx) => ctx.user?.id || 'anonymous', // Per-user throttle
   })
